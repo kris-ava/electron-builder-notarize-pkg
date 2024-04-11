@@ -15,7 +15,8 @@ const getAuthInfo = () => {
     APPLE_ID_PASSWORD: appleIdPassword,
     API_KEY_ID: appleApiKey,
     API_KEY_ISSUER_ID: appleApiIssuer,
-    TEAM_SHORT_NAME: teamShortName
+    TEAM_SHORT_NAME: teamShortName,
+    APPLE_TEAM_ID: appleTeamId,
   } = process.env;
 
   if (!appleId && !appleIdPassword && !appleApiKey && !appleApiIssuer) {
@@ -48,6 +49,7 @@ const getAuthInfo = () => {
     appleIdPassword,
     appleApiKey,
     appleApiIssuer,
+    appleTeamId,
     teamShortName
   };
 };
@@ -61,18 +63,27 @@ const isEnvTrue = value => {
   return value === 'true' || value === '' || value === '1';
 };
 
+// None of this is maintained by the original developers,
+// and I need to build this one final version of an electron
+// app. The code will not be pretty, and it will not work
+// for others.
+
 const getAuthorizingArgs = notarizeOptions => {
   const {
     appleId,
     appleIdPassword,
     appleApiKey,
-    appleApiIssuer
+    appleApiIssuer,
+    appleTeamId
   } = notarizeOptions;
 
-  return appleId ? [
-    '--username', appleId, '--password', appleIdPassword
-  ] : [
-    '--apiKey', appleApiKey, '--apiIssuer', appleApiIssuer
+  return [
+	  '--apple-id',
+	  appleId,
+	  '--password',
+	  appleIdPassword,
+	  '--team-id',
+	  appleTeamId,
   ];
 };
 
@@ -83,26 +94,25 @@ const startNotarizingPackage = async ({
 }) => {
   try {
     const {stdout} = await execa('xcrun', [
-      'altool',
-      '--notarize-app',
-      '--primary-bundle-id',
-      appId,
-      '--file',
+      'notarytool',
+      'submit',
       pkgPath,
       ...getAuthorizingArgs(notarizeOpts),
-      ...(
-        notarizeOpts.teamShortName ? [
-          '-itc_provider', notarizeOpts.teamShortName
-        ] : []
-      )
+      '--wait',
+      '--output-format',
+      'json'
     ]);
+    console.log('returned from notarytool:', stdout);
+    return JSON.parse(stdout);
 
+    /*
     const uuidMatch = /\nRequestUUID = (.+?)\n/g.exec(stdout);
     if (!uuidMatch) {
       throw new Error(`Failed to find request UUID in output:\n\n${stdout}`);
     }
 
     return uuidMatch[1];
+    */
   } catch (error) {
     throw new Error(`Failed to upload app to Apple's notarization servers\n\n${error.message}`);
   }
@@ -226,8 +236,8 @@ module.exports = async parameters => {
     appId,
     notarizeOpts: authInfo
   });
-  await delay(10000);
-  await waitForNotarize({uuid, notarizeOpts: authInfo});
+  //await delay(10000);
+  //await waitForNotarize({uuid, notarizeOpts: authInfo});
   await stapleApp({pkgPath});
   console.log(`Notarized ${pkgPath} successfully.`);
 };
